@@ -3,10 +3,14 @@ const express = require("express");
 const mysql = require("mysql2");
 const bodyParser = require("body-parser");
 const cors = require("cors");
+const bcrypt = require("bcrypt");
+const { OAuth2Client } = require('google-auth-library');
 
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
+
+const client = new OAuth2Client("150287260322-vjq4kv5ppue2mfh9mum8vq1q6km88bip.apps.googleusercontent.com");
 
 // Configura la conexión a la base de datos
 const db = mysql.createConnection({
@@ -26,17 +30,27 @@ db.connect((err) => {
 });
 
 // Ruta para agregar un usuario
-app.post("/usuarios", (req, res) => {
+app.post("/usuarios", async (req, res) => {
   const data = req.body;
-  const sql = "INSERT INTO Usuarios SET ?";
-  db.query(sql, data, (err, result) => {
-    if (err) {
-      console.error("Error inserting user:", err);
-      res.status(500).send("Error al agregar usuario");
-    } else {
-      res.send("Usuario agregado con éxito");
-    }
-  });
+  try {
+    // Hashear la contraseña
+    const hashedPassword = await bcrypt.hash(data.contrasena, 10);
+    data.contrasena_hash = hashedPassword;
+    delete data.contrasena; // Eliminar la contraseña en texto plano
+
+    const sql = "INSERT INTO Usuarios SET ?";
+    db.query(sql, data, (err, result) => {
+      if (err) {
+        console.error("Error inserting user:", err);
+        res.status(500).send("Error al agregar usuario");
+      } else {
+        res.send("Usuario agregado con éxito");
+      }
+    });
+  } catch (err) {
+    console.error("Error hashing password:", err);
+    res.status(500).send("Error al hashear la contraseña");
+  }
 });
 
 // Ruta para obtener todos los usuarios
@@ -110,18 +124,73 @@ app.get("/resultados_analisis/:analisis_id", (req, res) => {
 
 // Ruta para iniciar sesión y verificar usuario
 app.post("/login", (req, res) => {
-  const { email, contrasena_hash } = req.body;
-  const sql = "SELECT * FROM Usuarios WHERE email = ? AND contrasena_hash = ?";
-  db.query(sql, [email, contrasena_hash], (err, results) => {
+  const { email, contrasena } = req.body;
+  const sql = "SELECT * FROM Usuarios WHERE email = ?";
+  db.query(sql, [email], async (err, results) => {
     if (err) {
       console.error("Error logging in:", err);
       res.status(500).send("Error al iniciar sesión");
     } else if (results.length > 0) {
-      res.send({ message: "Inicio de sesión exitoso", user: results[0] });
+      const user = results[0];
+      // Verificar la contraseña
+      const match = await bcrypt.compare(contrasena, user.contrasena_hash);
+      if (match) {
+        res.send({ message: "Inicio de sesión exitoso", user });
+      } else {
+        res.status(401).send("Credenciales incorrectas");
+      }
     } else {
       res.status(401).send("Credenciales incorrectas");
     }
   });
+});
+
+app.post("/login/google", async (req, res) => {
+  const { token } = req.body;
+  try {
+    const ticket = await client.verifyIdToken({
+      idToken: token,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    console.log('Token verificado:', token); // Imprimir el token en consola
+    console.log('Payload:', payload); // Imprimir el payload en consola
+    const { sub: google_id, email, name: nombre } = payload;
+
+    // Verificar si el usuario ya existe
+    const sqlSelect = "SELECT * FROM Usuarios WHERE google_id = ?";
+    db.query(sqlSelect, [google_id], (err, results) => {
+      if (err) {
+        console.error("Error checking user:", err);
+        res.status(500).send("Error al verificar usuario");
+      } else if (results.length > 0) {
+        res.send({ message: "Inicio de sesión exitoso", user: results[0] });
+      } else {
+        // Crear nuevo usuario
+        const sqlInsert = "INSERT INTO Usuarios SET ?";
+        const newUser = { google_id, email, nombre };
+        db.query(sqlInsert, newUser, (err, result) => {
+          if (err) {
+            console.error("Error inserting user:", err);
+            res.status(500).send("Error al agregar usuario");
+          } else {
+            // Obtener el usuario recién creado para devolverlo en la respuesta
+            db.query(sqlSelect, [google_id], (err, results) => {
+              if (err) {
+                console.error("Error fetching new user:", err);
+                res.status(500).send("Error al obtener nuevo usuario");
+              } else {
+                res.send({ message: "Usuario creado y sesión iniciada", user: results[0] });
+              }
+            });
+          }
+        });
+      }
+    });
+  } catch (error) {
+    console.error("Error verifying Google token:", error);
+    res.status(401).send("Token de Google inválido");
+  }
 });
 
 // Inicia el servidor

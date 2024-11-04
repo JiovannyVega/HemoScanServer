@@ -4,11 +4,13 @@ USE HemoScan;
 CREATE TABLE Usuarios (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
+    apellido VARCHAR(100),  -- Nueva columna añadida
     email VARCHAR(100) NOT NULL UNIQUE,
     edad INT,
     sexo CHAR(1),
     telefono VARCHAR(15),
-    contrasena_hash VARCHAR(255) NOT NULL
+    contrasena_hash VARCHAR(255) NOT NULL,
+    google_id VARCHAR(255) UNIQUE
 );
 CREATE TABLE Analisis (
     id INT AUTO_INCREMENT PRIMARY KEY,
