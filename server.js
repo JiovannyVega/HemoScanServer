@@ -156,7 +156,7 @@ app.post("/login/google", async (req, res) => {
     const payload = ticket.getPayload()
     console.log('Token verificado:', token) // Imprimir el token en consola
     console.log('Payload:', payload) // Imprimir el payload en consola
-    const { sub: google_id, email, name: nombre } = payload
+    const { sub: google_id, email, given_name: nombre, family_name: apellido, picture } = payload
 
     // Verificar si el usuario ya existe
     const sqlSelect = "SELECT * FROM Usuarios WHERE google_id = ?"
@@ -169,7 +169,7 @@ app.post("/login/google", async (req, res) => {
       } else {
         // Crear nuevo usuario
         const sqlInsert = "INSERT INTO Usuarios SET ?"
-        const newUser = { google_id, email, nombre, contrasena_hash: '' } // Proporcionar un valor predeterminado para contrasena_hash
+        const newUser = { google_id, email, nombre, apellido, picture, contrasena_hash: '' } // Proporcionar un valor predeterminado para contrasena_hash
         db.query(sqlInsert, newUser, (err, result) => {
           if (err) {
             console.error("Error inserting user:", err)
