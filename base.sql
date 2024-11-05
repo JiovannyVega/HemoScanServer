@@ -9,7 +9,7 @@ CREATE TABLE Usuarios (
     edad INT,
     sexo CHAR(1),
     telefono VARCHAR(15),
-    contrasena_hash VARCHAR(255) NOT NULL,
+    contrasena_hash VARCHAR(255),  -- Permitir valores nulos
     google_id VARCHAR(255) UNIQUE
 );
 CREATE TABLE Analisis (
